@@ -1,6 +1,6 @@
 Name: python-module-adns
 Version: 1.1.0
-Release: alt0.2
+Release: alt0.2.1
 
 Summary: A Python module for the ADNS library
 Group: Development/Python
@@ -40,6 +40,9 @@ export CFLAGS="$RPM_OPT_FLAGS"
 %doc README PKG-INFO
 
 %changelog
+* Tue Mar 29 2005 ALT QA Team Robot <qa-robot@altlinux.org> 1.1.0-alt0.2.1
+- Rebuilt with python-2.4.
+
 * Mon Mar 07 2005 LAKostis <lakostis at altlinux.ru> 1.1.0-alt0.2
 - First build for Sisyphus.
 
