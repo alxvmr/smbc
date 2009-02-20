@@ -6,6 +6,7 @@ any later version.
 */
 
 #include "Python.h"
+#include "pymemcompat.h"
 #include <adns.h>
 #include <string.h>
 #include <assert.h>
@@ -88,9 +89,10 @@ static _constant_class adns_qflags[] = {
 };
 
 static _constant_class adns_rr[] = {
-	{ "typemask", adns__rrt_typemask },
+	{ "typemask", adns_rrt_typemask },
 	{ "deref", adns__qtf_deref },
 	{ "mail822", adns__qtf_mail822 },
+	{ "unknown", adns_r_unknown },
 	{ "none", adns_r_none },
 	{ "A", adns_r_a },
 	{ "NSraw", adns_r_ns_raw },
@@ -106,6 +108,8 @@ static _constant_class adns_rr[] = {
 	{ "TXT", adns_r_txt },
 	{ "RPraw", adns_r_rp_raw },
 	{ "RP", adns_r_rp },
+	{ "SRVraw", adns_r_srv_raw },
+	{ "SRV", adns_r_srv },
 	{ "ADDR", adns_r_addr },
 	{ NULL, 0 }
 };
@@ -174,9 +178,10 @@ interpret_hostaddr(
 	}
 	o = Py_BuildValue("siO", hostaddr->host, hostaddr->astatus,
 			  addrs);
+	Py_DECREF(addrs);
 	return o;
 }
-	
+
 static PyObject *
 interpret_answer(
 	adns_answer *answer
@@ -184,7 +189,7 @@ interpret_answer(
 {
 	PyObject *o, *rrs;
 	int i;
-	adns_rrtype t = answer->type & adns__rrt_typemask;
+	adns_rrtype t = answer->type & adns_rrt_typemask;
 	adns_rrtype td = answer->type & adns__qtf_deref;
 
 	rrs = PyTuple_New(answer->nrrs);
@@ -214,8 +219,9 @@ interpret_answer(
 			if (td) {
 				adns_rr_inthostaddr *v = \
 					answer->rrs.inthostaddr+i;
-				a = Py_BuildValue("iO", v->i,
-						  interpret_hostaddr(&v->ha));
+				o = interpret_hostaddr(&v->ha);
+				a = Py_BuildValue("iO", v->i, o);
+				Py_DECREF(o);
 			} else {
 				adns_rr_intstr *v = answer->rrs.intstr+i;
 				a = Py_BuildValue("is", v->i, v->str);
@@ -271,6 +277,18 @@ interpret_answer(
 			{
 				adns_rr_strpair *v = answer->rrs.strpair+i;
 				a = Py_BuildValue("ss", v->array[0], v->array[1]);
+			}
+			break;
+		case adns_r_srv_raw:
+			if (td) {
+				adns_rr_srvha *v = answer->rrs.srvha+i;
+				o = interpret_hostaddr(&v->ha);
+				a = Py_BuildValue("iiiO", v->priority, v->weight, v->port, o);
+				Py_DECREF(o);
+			} else {
+				adns_rr_srvraw *v = answer->rrs.srvraw+i;
+				a = Py_BuildValue("iiis", v->priority, v->weight, v->port,
+						   v->host);
 			}
 			break;
 		default:
@@ -686,7 +704,7 @@ newADNS_Stateobject(void)
 {
 	ADNS_Stateobject *self;
 	
-	self = PyObject_NEW(ADNS_Stateobject, &ADNS_Statetype);
+	self = PyObject_New(ADNS_Stateobject, &ADNS_Statetype);
 	if (self == NULL)
 		return NULL;
 	self->state = NULL;
@@ -701,7 +719,7 @@ ADNS_State_dealloc(ADNS_Stateobject *self)
 	adns_finish(self->state);
 	Py_END_ALLOW_THREADS;
 	Py_INCREF(Py_None);
-	PyMem_DEL(self);
+	PyObject_Del(self);
 }
 
 static char ADNS_Statetype__doc__[] = 
@@ -890,7 +908,7 @@ newADNS_Queryobject(ADNS_Stateobject *state)
 {
 	ADNS_Queryobject *self;
 	
-	self = PyObject_NEW(ADNS_Queryobject, &ADNS_Querytype);
+	self = PyObject_New(ADNS_Queryobject, &ADNS_Querytype);
 	if (self == NULL)
 		return NULL;
 	Py_INCREF(state);
@@ -912,7 +930,7 @@ ADNS_Query_dealloc(ADNS_Queryobject *self)
 	Py_XDECREF(self->exc_type);
 	Py_XDECREF(self->exc_value);
 	Py_XDECREF(self->exc_traceback);
-	PyMem_DEL(self);
+	PyObject_Del(self);
 }
 
 static char ADNS_Querytype__doc__[] = 

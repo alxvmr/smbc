@@ -1,11 +1,12 @@
 Metadata-Version: 1.0
 Name: adns-python
-Version: 1.1.0
+Version: 1.2.1
 Summary: An interface to GNU adns
-Home-page: http://dustman.net/andy/python/adns-python
+Home-page: http://code.google.com/p/adns-python
 Author: Andy Dustman
-Author-email: andy@dustman.net
+Author-email: farcepest@gmail.com
 License: GPL
+Download-URL: http://adns-python.googlecode.com/files/adns-python-1.2.1.tar.gz
 Description: adns-python is a Python module that interfaces to the adns asynchronous
         resolver library.
         
