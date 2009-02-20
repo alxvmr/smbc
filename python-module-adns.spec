@@ -1,45 +1,47 @@
 Name: python-module-adns
-Version: 1.1.0
-Release: alt0.2.1.1
+Version: 1.2.1
+Release: alt1
 
-Summary: A Python module for the ADNS library
+%define sname adns-python
+
+Summary: Python interface for the GNU adns library
 Group: Development/Python
-License: GPL
-Url: http://dustman.net/andy/python/adns-python
+License: GPLv2+
+Url: http://code.google.com/p/%sname/
+Packager: Dmitry V. Levin <ldv@altlinux.org>
 
-%setup_python_module adns-python
+%setup_python_module adns
 
-Source: %modulename-%version.tar.gz
+# http://%sname.googlecode.com/files/%sname-%version.tar.gz
+Source: %sname-%version.tar
 
-Requires: libadns
+Provides: %sname = %version-%release
+Obsoletes: %sname
 
-Provides: adns-python = %version
-
-BuildPreReq: libadns-devel
+BuildRequires: libadns-devel
 
 %description
-%name is a Python module that interfaces to the adns asynchronous
-resolver library.
-
-%define python_libdir %_libdir/python%__python_version
-%define python_site_packages_dir %python_libdir/site-packages
-%define python_includedir %_includedir/python%__python_version
+The adns module provides an interface to the GNU ADNS asynchronous
+DNS resolver library.
 
 %prep
-%setup -q -n %modulename-%version
+%setup -n %sname-%version
 
 %build
-export CFLAGS="$RPM_OPT_FLAGS"
-%__python setup.py build
+%python_build
 
 %install
-%__python setup.py install --root=%buildroot --optimize=2
+%python_install
 
 %files
-%python_site_packages_dir
+%python_sitelibdir/*
 %doc README PKG-INFO
 
 %changelog
+* Fri Feb 20 2009 Dmitry V. Levin <ldv@altlinux.org> 1.2.1-alt1
+- Updated to 1.2.1.
+- Specfile cleanup.
+
 * Thu Jan 24 2008 Grigory Batalov <bga@altlinux.ru> 1.1.0-alt0.2.1.1
 - Rebuilt with python-2.5.
 
