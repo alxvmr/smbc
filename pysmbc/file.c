@@ -1,6 +1,10 @@
 /* -*- Mode: C; c-file-style: "gnu" -*-
  * pysmbc - Python bindings for libsmbclient
- * Copyright (C) 2002, 2005, 2006, 2007, 2008  Tim Waugh <twaugh@redhat.com>
+ * Copyright (C) 2002, 2005, 2006, 2007, 2008, 2010  Red Hat, Inc
+ * Copyright (C) 2010  Open Source Solution Technology Corporation
+ * Authors:
+ *  Tim Waugh <twaugh@redhat.com>
+ *  Tsukasa Hamano <hamano@osstech.co.jp>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,16 +21,10 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include <Python.h>
 #include "smbcmodule.h"
 #include "context.h"
 #include "file.h"
-
-typedef struct
-{
-  PyObject_HEAD
-  Context *context;
-  SMBCFILE *file;
-} File;
 
 //////////
 // File //
@@ -48,9 +46,9 @@ File_init (File *self, PyObject *args, PyObject *kwds)
 {
   PyObject *ctxobj;
   Context *ctx;
-  const char *uri;
-  long flags;
-  long mode;
+  char *uri = NULL;
+  int flags = 0;
+  int mode = 0;
   smbc_open_fn fn;
   SMBCFILE *file;
   static char *kwlist[] = 
@@ -62,7 +60,7 @@ File_init (File *self, PyObject *args, PyObject *kwds)
       NULL
     };
 
-  if (!PyArg_ParseTupleAndKeywords (args, kwds, "Osii", kwlist, &ctxobj,
+  if (!PyArg_ParseTupleAndKeywords (args, kwds, "O|sii", kwlist, &ctxobj,
 				    &uri, &flags, &mode))
     return -1;
 
@@ -77,15 +75,16 @@ File_init (File *self, PyObject *args, PyObject *kwds)
   Py_INCREF (ctxobj);
   ctx = (Context *) ctxobj;
   self->context = ctx;
-  fn = smbc_getFunctionOpen (ctx->context);
-  file = (*fn) (ctx->context, uri, (int) flags, (mode_t) mode);
-  if (file == NULL)
-    {
-      PyErr_SetFromErrno (PyExc_RuntimeError);
-      return -1;
-    }
-
-  self->file = file;
+  if(uri){
+	fn = smbc_getFunctionOpen (ctx->context);
+	file = (*fn) (ctx->context, uri, (int) flags, (mode_t) mode);
+	if (file == NULL)
+	  {
+		PyErr_SetFromErrno (PyExc_RuntimeError);
+		return -1;
+	  }
+	self->file = file;
+  }
   debugprintf ("%p open()\n", self->file);
   debugprintf ("%p <- File_init() = 0\n", self->file);
   return 0;
@@ -111,8 +110,105 @@ File_dealloc (File *self)
   self->ob_type->tp_free ((PyObject *) self);
 }
 
+static PyObject *
+File_fstat(File *self, PyObject *args)
+{
+  Context *ctx = self->context;
+  smbc_fstat_fn fn;
+  struct stat st;
+  int ret;
+
+  fn = smbc_getFunctionFstat(ctx->context);
+  ret = (*fn)(ctx->context, self->file, &st);
+  if(ret < 0){
+	return NULL;
+  }
+  return Py_BuildValue("(IkkkIIkkkk)",
+					   st.st_mode,
+					   st.st_ino,
+					   st.st_dev,
+					   st.st_nlink,
+					   st.st_uid,
+					   st.st_gid,
+					   st.st_size,
+					   st.st_atime,
+					   st.st_mtime,
+					   st.st_ctime);
+}
+
+static PyObject *
+File_read(File *self, PyObject *args)
+{
+  Context *ctx = self->context;
+  size_t size = 0;
+  smbc_read_fn fn;
+  char *buf;
+  ssize_t len;
+  PyObject *ret;
+  smbc_fstat_fn fn_fstat;
+  struct stat st;
+
+  if(!PyArg_ParseTuple(args, "|k", &size)){
+	return NULL;
+  }
+  fn = smbc_getFunctionRead(ctx->context);
+
+  if(size == 0){
+	fn_fstat = smbc_getFunctionFstat(ctx->context);
+	(*fn_fstat)(ctx->context, self->file, &st);
+	size = st.st_size;
+  }
+
+  buf = (char *)malloc(size);
+  if(!buf){
+	return PyErr_NoMemory();
+  }
+  len = (*fn)(ctx->context, self->file, buf, size);
+  ret = PyString_FromStringAndSize(buf, len);
+  free(buf);
+
+  return ret;
+}
+
+static PyObject *
+File_write(File *self, PyObject *args)
+{
+  Context *ctx = self->context;
+  int size = 0;
+  smbc_write_fn fn;
+  char *buf;
+  ssize_t len;
+
+  if(!PyArg_ParseTuple(args, "s#", &buf, &size)){
+	return NULL;
+  }
+  fn = smbc_getFunctionWrite(ctx->context);
+  len = (*fn)(ctx->context, self->file, buf, size);
+
+  return PyInt_FromLong(len);
+}
+
+static PyObject *
+File_close(File *self, PyObject *args)
+{
+  Context *ctx = self->context;
+  smbc_close_fn fn;
+  int ret = 0;
+
+  fn = smbc_getFunctionClose(ctx->context);
+  if(self->file){
+	ret = (*fn)(ctx->context, self->file);
+	self->file = NULL;
+  }
+  return PyInt_FromLong(ret);
+}
+
 PyMethodDef File_methods[] =
   {
+	{"fstat", (PyCFunction)File_fstat, METH_NOARGS, NULL},
+	{"read", (PyCFunction)File_read, METH_VARARGS, NULL},
+	{"write", (PyCFunction)File_write, METH_VARARGS, NULL},
+	{"close", (PyCFunction)File_close, METH_NOARGS, NULL},
     { NULL } /* Sentinel */
   };
 

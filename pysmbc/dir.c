@@ -17,6 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include <Python.h>
 #include "smbcmodule.h"
 #include "context.h"
 #include "dir.h"
@@ -76,11 +77,16 @@ Dir_init (Dir *self, PyObject *args, PyObject *kwds)
   fn = smbc_getFunctionOpendir (ctx->context);
   errno = 0;
   dir = (*fn) (ctx->context, uri);
-  if (dir == NULL)
-    {
-      PyErr_SetFromErrno (PyExc_RuntimeError);
-      return -1;
-    }
+  if (dir == NULL) {
+	if(errno == EPERM){
+	  PyErr_SetString(PermissionError, "Permission denied.");
+	}else if(errno == ENOMEM){
+	  PyErr_SetFromErrno(PyExc_MemoryError);
+	}else{
+	  PyErr_SetFromErrno(PyExc_RuntimeError);
+	}
+	return -1;
+  }
 
   self->dir = dir;
   debugprintf ("%p <- Dir_init() = 0\n", self->dir);

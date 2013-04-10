@@ -1,6 +1,10 @@
 /* -*- Mode: C; c-file-style: "gnu" -*-
  * pysmbc - Python bindings for libsmbclient
- * Copyright (C) 2002, 2005, 2006, 2007, 2008  Tim Waugh <twaugh@redhat.com>
+ * Copyright (C) 2002, 2005, 2006, 2007, 2008, 2010  Red Hat, Inc
+ * Copyright (C) 2010  Open Source Solution Technology Corporation
+ * Authors:
+ *  Tim Waugh <twaugh@redhat.com>
+ *  Tsukasa Hamano <hamano@osstech.co.jp>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,6 +21,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include <Python.h>
 #include <string.h>
 #include "smbcmodule.h"
 #include "context.h"
@@ -100,20 +105,19 @@ static int
 Context_init (Context *self, PyObject *args, PyObject *kwds)
 {
   PyObject *auth = NULL;
-  int debug = -1;
-  unsigned int flags = 0;
+  int debug = 0;
   SMBCCTX *ctx;
   static char *kwlist[] = 
     {
       "auth_fn",
       "debug",
-      "flags",
       NULL
     };
 
-  if (!PyArg_ParseTupleAndKeywords (args, kwds, "|Oii", kwlist,
-				    &auth, &debug, &flags))
+  if (!PyArg_ParseTupleAndKeywords (args, kwds, "|Oi", kwlist,
+									&auth, &debug)){
     return -1;
+  }
 
   if (auth)
     {
@@ -138,9 +142,6 @@ Context_init (Context *self, PyObject *args, PyObject *kwds)
       return -1;
     }
 
-  if (flags)
-    ctx->flags |= flags;
-
   if (smbc_init_context (ctx) == NULL)
     {
       PyErr_SetFromErrno (PyExc_RuntimeError);
@@ -149,8 +150,7 @@ Context_init (Context *self, PyObject *args, PyObject *kwds)
       return -1;
     }
 
-  if (debug != -1)
-    smbc_setDebug (ctx, debug);
+  smbc_setDebug (ctx, debug);
 
   self->context = ctx;
   smbc_setOptionUserData (ctx, self);
@@ -177,36 +177,113 @@ static PyObject *
 Context_open (Context *self, PyObject *args)
 {
   PyObject *largs, *lkwlist;
-  PyObject *uri;
-  PyObject *flags;
-  PyObject *mode;
-  PyObject *file;
+  char *uri;
+  File *file;
+  int flags = 0;
+  int mode = 0;
+  smbc_open_fn fn;
 
   debugprintf ("%p -> Context_open()\n", self->context);
-  if (!PyArg_ParseTuple (args, "OOO", &uri, &flags, &mode))
-    {
+  if(!PyArg_ParseTuple (args, "s|ii", &uri, &flags, &mode)){
       debugprintf ("%p <- Context_open() EXCEPTION\n", self->context);
       return NULL;
-    }
+  }
 
   largs = Py_BuildValue ("()");
   lkwlist = PyDict_New ();
   PyDict_SetItemString (lkwlist, "context", (PyObject *) self);
-  PyDict_SetItemString (lkwlist, "uri", uri);
-  PyDict_SetItemString (lkwlist, "flags", flags);
-  PyDict_SetItemString (lkwlist, "mode", mode);
-  file = PyType_GenericNew (&smbc_FileType, largs, lkwlist);
-  if (smbc_FileType.tp_init (file, largs, lkwlist) < 0)
-    {
-      smbc_FileType.tp_dealloc (file);
-      debugprintf ("%p <- Context_open() EXCEPTION\n", self->context);
-      return NULL;
-    }
-
+  file = (File *)smbc_FileType.tp_new(&smbc_FileType, largs, lkwlist);
+  if(!file){
+	return PyErr_NoMemory();
+  }
+  if (smbc_FileType.tp_init ((PyObject *)file, largs, lkwlist) < 0){
+	smbc_FileType.tp_dealloc((PyObject *)file);
+	debugprintf ("%p <- Context_open() EXCEPTION\n", self->context);
+	return NULL;
+  }
+  fn = smbc_getFunctionOpen (self->context);
+  file->file = (*fn)(self->context, uri, (int)flags, (mode_t)mode);
+  if(!file->file){
+	PyErr_SetFromErrno(PyExc_RuntimeError);
+	return NULL;
+  }
   Py_DECREF (largs);
   Py_DECREF (lkwlist);
   debugprintf ("%p <- Context_open() = File\n", self->context);
-  return file;
+  return (PyObject *)file;
+}
+
+static PyObject *
+Context_creat(Context *self, PyObject *args)
+{
+  PyObject *largs, *lkwlist;
+  char *uri;
+  int mode = 0;
+  File *file;
+  smbc_creat_fn fn;
+
+  if(!PyArg_ParseTuple (args, "s|i", &uri, &mode)){
+      return NULL;
+  }
+
+  largs = Py_BuildValue ("()");
+  lkwlist = PyDict_New ();
+  PyDict_SetItemString (lkwlist, "context", (PyObject *) self);
+  file = (File *)smbc_FileType.tp_new(&smbc_FileType, largs, lkwlist);
+  if(!file){
+	return PyErr_NoMemory();
+  }
+  if (smbc_FileType.tp_init ((PyObject *)file, largs, lkwlist) < 0){
+	smbc_FileType.tp_dealloc((PyObject *)file);
+	return NULL;
+  }
+  fn = smbc_getFunctionCreat(self->context);
+  file->file = (*fn)(self->context, uri, mode);
+  if(!file->file){
+	PyErr_SetFromErrno(PyExc_RuntimeError);
+	return NULL;
+  }
+  Py_DECREF (largs);
+  Py_DECREF (lkwlist);
+  return (PyObject *)file;
+}
+
+static PyObject *
+Context_unlink(Context *self, PyObject *args)
+{
+  int ret;
+  char *uri = NULL;
+  smbc_unlink_fn fn;
+
+  if(!PyArg_ParseTuple (args, "s", &uri)) {
+	return NULL;
+  }
+
+  fn = smbc_getFunctionUnlink(self->context);
+  ret = (*fn)(self->context, uri);
+  return PyInt_FromLong(ret);
+}
+
+static PyObject *
+Context_rename(Context *self, PyObject *args)
+{
+  int ret;
+  char *ouri = NULL;
+  char *nuri = NULL;
+  Context *nctx = NULL;
+  smbc_rename_fn fn;
+
+  if (!PyArg_ParseTuple(args, "ss|O", &ouri, &nuri, &nctx)) {
+	return NULL;
+  }
+
+  fn = smbc_getFunctionRename(self->context);
+  if(nctx && nctx->context){
+	ret = (*fn)(self->context, ouri, nctx->context, nuri);
+  }else{
+	ret = (*fn)(self->context, ouri, self->context, nuri);
+  }
+  return PyInt_FromLong(ret);
 }
 
 static PyObject *
@@ -239,6 +316,87 @@ Context_opendir (Context *self, PyObject *args)
   Py_DECREF (lkwlist);
   debugprintf ("%p <- Context_opendir() = Dir\n", self->context);
   return dir;
+}
+
+static PyObject *
+Context_mkdir(Context *self, PyObject *args)
+{
+  int ret;
+  char *uri = NULL;
+  unsigned int mode = 0;
+  smbc_mkdir_fn fn;
+
+  if(!PyArg_ParseTuple (args, "s|I", &uri, &mode)) {
+	return NULL;
+  }
+
+  fn = smbc_getFunctionMkdir(self->context);
+  ret = (*fn)(self->context, uri, mode);
+  return PyInt_FromLong(ret);
+}
+
+static PyObject *
+Context_rmdir(Context *self, PyObject *args)
+{
+  int ret;
+  char *uri = NULL;
+  smbc_rmdir_fn fn;
+
+  if(!PyArg_ParseTuple (args, "s", &uri)) {
+	return NULL;
+  }
+
+  fn = smbc_getFunctionRmdir(self->context);
+  ret = (*fn)(self->context, uri);
+  return PyInt_FromLong(ret);
+}
+
+static PyObject *
+Context_stat(Context *self, PyObject *args)
+{
+  int ret;
+  char *uri = NULL;
+  smbc_stat_fn fn;
+  struct stat st;
+
+  if(!PyArg_ParseTuple (args, "s", &uri)) {
+	return NULL;
+  }
+
+  fn = smbc_getFunctionStat(self->context);
+  ret = (*fn)(self->context, uri, &st);
+  if(ret < 0){
+	PyErr_SetString(PyExc_RuntimeError, "No such file or directory");
+	return NULL;
+  }
+  return Py_BuildValue("(IkkkIIkkkk)",
+					   st.st_mode,
+					   st.st_ino,
+					   st.st_dev,
+					   st.st_nlink,
+					   st.st_uid,
+					   st.st_gid,
+					   st.st_size,
+					   st.st_atime,
+					   st.st_mtime,
+					   st.st_ctime);
+}
+
+static PyObject *
+Context_chmod(Context *self, PyObject *args)
+{
+  int ret;
+  char *uri = NULL;
+  mode_t mode = 0;
+  smbc_chmod_fn fn;
+
+  if(!PyArg_ParseTuple (args, "si", &uri, &mode)) {
+	return NULL;
+  }
+
+  fn = smbc_getFunctionChmod(self->context);
+  ret = (*fn)(self->context, uri, mode);
+  return PyInt_FromLong(ret);
 }
 
 static PyObject *
@@ -428,15 +586,69 @@ PyMethodDef Context_methods[] =
       (PyCFunction) Context_opendir, METH_VARARGS,
       "opendir(uri) -> Dir\n\n"
       "@type uri: string\n"
-      "@param uri: URI to open\n"
+      "@param uri: URI to opendir\n"
       "@return: a L{smbc.Dir} object for the URI" },
 
     { "open",
       (PyCFunction) Context_open, METH_VARARGS,
-      "open(uri) -> int\n\n"
+      "open(uri) -> File\n\n"
       "@type uri: string\n"
       "@param uri: URI to open\n"
       "@return: a L{smbc.File} object for the URI" },
+
+    { "creat",
+      (PyCFunction) Context_creat, METH_VARARGS,
+      "creat(uri) -> File\n\n"
+      "@type uri: string\n"
+      "@param uri: URI to creat\n"
+      "@return: a L{smbc.File} object for the URI" },
+
+    { "unlink",
+      (PyCFunction) Context_unlink, METH_VARARGS,
+      "unlink(uri) -> int\n\n"
+      "@type uri: string\n"
+      "@param uri: URI to unlink\n"
+      "@return: 0 on success, < 0 on error" },
+
+    { "rename",
+      (PyCFunction) Context_rename, METH_VARARGS,
+      "rename(ouri, nuri) -> int\n\n"
+      "@type ouri: string\n"
+      "@param ouri: The original smb uri\n"
+      "@type nuri: string\n"
+      "@param nuri: The new smb uri\n"
+      "@return: 0 on success, < 0 on error" },
+
+    { "mkdir",
+      (PyCFunction) Context_mkdir, METH_VARARGS,
+      "mkdir(uri, mode) -> int\n\n"
+      "@type uri: string\n"
+      "@param uri: URI to mkdir\n"
+      "@param mode: Specifies the permissions to use.\n"
+      "@return: 0 on success, < 0 on error" },
+
+    { "rmdir",
+      (PyCFunction) Context_rmdir, METH_VARARGS,
+      "rmdir(uri) -> int\n\n"
+      "@type uri: string\n"
+      "@param uri: URI to rmdir\n"
+      "@return: 0 on success, < 0 on error" },
+
+    { "stat",
+      (PyCFunction) Context_stat, METH_VARARGS,
+      "stat(uri) -> tuple\n\n"
+      "@type uri: string\n"
+      "@param uri: URI to get stat information\n"
+      "@return: stat information" },
+
+    { "chmod",
+      (PyCFunction) Context_chmod, METH_VARARGS,
+      "chmod(uri, mode) -> int\n\n"
+      "@type uri: string\n"
+      "@param uri: URI to chmod\n"
+      "@type mode: int\n"
+      "@param mode: permissions to set\n"
+      "@return: 0 on success, < 0 on error" },
 
     { NULL } /* Sentinel */
   };

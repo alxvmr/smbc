@@ -29,6 +29,8 @@ static PyMethodDef SmbcMethods[] = {
   { NULL, NULL, 0, NULL }
 };
 
+PyObject *PermissionError;
+
 void
 initsmbc (void)
 {
@@ -50,10 +52,8 @@ initsmbc (void)
   PyModule_AddObject (m, "Dir", (PyObject *) &smbc_DirType);
 
   // File type
-  smbc_FileType.tp_new = PyType_GenericNew;
   if (PyType_Ready (&smbc_FileType) < 0)
     return;
-
   PyModule_AddObject (m, "File", (PyObject *) &smbc_FileType);
 
   // Dirent type
@@ -80,6 +80,10 @@ initsmbc (void)
   INT_CONSTANT (SMB_CTX_, FLAG_USE_KERBEROS);
   INT_CONSTANT (SMB_CTX_, FLAG_FALLBACK_AFTER_KERBEROS);
   INT_CONSTANT (SMBCCTX_, FLAG_NO_AUTO_ANONYMOUS_LOGON);
+
+  PermissionError = PyErr_NewException("smbc.PermissionError", NULL, NULL);
+  Py_INCREF(PermissionError);
+  PyModule_AddObject(m, "PermissionError", PermissionError);
 }
 
 ///////////////
