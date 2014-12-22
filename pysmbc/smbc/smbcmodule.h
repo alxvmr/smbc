@@ -1,6 +1,10 @@
 /* -*- Mode: C; c-file-style: "gnu" -*-
  * pysmbc - Python bindings for libsmbclient
- * Copyright (C) 2002, 2005, 2006, 2007, 2008  Tim Waugh <twaugh@redhat.com>
+ * Copyright (C) 2002, 2005, 2006, 2007, 2008, 2010  Red Hat, Inc
+ * Copyright (C) 2010  Open Source Solution Technology Corporation
+ * Authors:
+ *  Tim Waugh <twaugh@redhat.com>
+ *  Tsukasa Hamano <hamano@osstech.co.jp>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,7 +35,24 @@
 #endif
 
 extern void debugprintf (const char *fmt, ...) FORMAT ((__printf__, 1, 2));
+extern void pysmbc_SetFromErrno(void);
 
+extern PyObject *NoEntryError;
 extern PyObject *PermissionError;
+extern PyObject *ExistsError;
+extern PyObject *NotEmptyError;
+extern PyObject *TimedOutError;
+
+#define SMBC_XATTR							"system.nt_sec_desc."
+#define SMBC_XATTR_ALL 					SMBC_XATTR "*"
+#define SMBC_XATTR_ALL_SID			SMBC_XATTR_ALL "+"
+#define SMBC_XATTR_REVISION 		SMBC_XATTR "revision"
+#define SMBC_XATTR_OWNER			SMBC_XATTR "owner"
+#define SMBC_XATTR_OWNER_SID	SMBC_XATTR_OWNER "+"
+#define SMBC_XATTR_GROUP 			SMBC_XATTR "group"
+#define SMBC_XATTR_GROUP_SID 	SMBC_XATTR_GROUP "+"
+#define SMBC_XATTR_ACL 				SMBC_XATTR "acl"
+#define SMBC_XATTR_ACL_SID			SMBC_XATTR_ACL "+"
+
 
 #endif /* HAVE_SMBCMODULE_H */

@@ -1,13 +1,13 @@
 # This is setting template.
 # You must change these parameter if you perform test.
+# The following configration will create \\server\share\testdir
+# directory, so user should have write permission.
 
 WORKGROUP = "WORKGROUP"
-#SERVER = "hamano21"
-#SHARE = "test"
-#USERNAME = "user1"
-#PASSWORD = "password"
-
-SERVER = "kujira"
-SHARE = "test"
-USERNAME = "test"
+SERVER = "server"
+SHARE = "share"
+USERNAME = "username"
 PASSWORD = "password"
+TESTDIR = "testdir"
+
+

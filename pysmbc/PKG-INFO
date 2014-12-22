@@ -1,9 +1,9 @@
-Metadata-Version: 1.0
+Metadata-Version: 1.1
 Name: pysmbc
-Version: 1.0.8
+Version: 1.0.15.3
 Summary: Python bindings for libsmbclient
 Home-page: http://cyberelk.net/tim/software/pysmbc/
-Author: ['Tim Waugh <twaugh@redhat.com>', 'Tsukasa Hamano <hamano@osstech.co.jp>']
+Author: ['Tim Waugh <twaugh@redhat.com>', 'Tsukasa Hamano <hamano@osstech.co.jp>', 'Roberto Polli <rpolli@babel.it>']
 Author-email: UNKNOWN
 License: GPLv2+
 Download-URL: http://cyberelk.net/tim/data/pysmbc/
@@ -25,13 +25,13 @@ Description: This is a set of Python bindings for the libsmbclient library
         >>> import smbc
         >>> import os
         >>> ctx = smbc.Context (auth_fn=my_auth_callback_fn)
-        >>> file = ctx.open ("smb://SERVER/file.txt", os.O_CREAT | os.O_WRONLY)
+        >>> file = ctx.open ("smb://SERVER/music/file.txt", os.O_CREAT | os.O_WRONLY)
         >>> file.write ("hello")
         
         >>> # Read file example:
         >>> import smbc
         >>> ctx = smbc.Context (auth_fn=my_auth_callback_fn)
-        >>> file = ctx.open ("smb://SERVER/file.txt")
+        >>> file = ctx.open ("smb://SERVER/music/file.txt")
         >>> print file.read()
         hello
         

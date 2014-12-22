@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-## Copyright (C) 2002, 2005, 2006, 2007, 2008, 2010  Red Hat, Inc
+## Copyright (C) 2002, 2005, 2006, 2007, 2008, 2010, 2011, 2012  Red Hat, Inc
 ## Copyright (C) 2010  Open Source Solution Technology Corporation
 ## Authors:
 ##  Tim Waugh <twaugh@redhat.com>
@@ -38,25 +38,38 @@ from the samba project.
 >>> import smbc
 >>> import os
 >>> ctx = smbc.Context (auth_fn=my_auth_callback_fn)
->>> file = ctx.open ("smb://SERVER/file.txt", os.O_CREAT | os.O_WRONLY)
+>>> file = ctx.open ("smb://SERVER/music/file.txt", os.O_CREAT | os.O_WRONLY)
 >>> file.write ("hello")
 
 >>> # Read file example:
 >>> import smbc
 >>> ctx = smbc.Context (auth_fn=my_auth_callback_fn)
->>> file = ctx.open ("smb://SERVER/file.txt")
+>>> file = ctx.open ("smb://SERVER/music/file.txt")
 >>> print file.read()
 hello
 
 """
 
 from distutils.core import setup, Extension
+import subprocess
+
+def pkgconfig_I (pkg):
+    dirs = []
+    c = subprocess.Popen (["pkg-config", "--cflags", pkg],
+                          stdout=subprocess.PIPE)
+    (stdout, stderr) = c.communicate ()
+    for p in stdout.decode ('ascii').split ():
+        if p.startswith ("-I"):
+            dirs.append (p[2:])
+    return dirs
+    
 setup (name="pysmbc",
-       version="1.0.8",
+       version="1.0.15.3",
        description="Python bindings for libsmbclient",
        long_description=__doc__,
        author=["Tim Waugh <twaugh@redhat.com>",
-               "Tsukasa Hamano <hamano@osstech.co.jp>"],
+               "Tsukasa Hamano <hamano@osstech.co.jp>",
+               "Roberto Polli <rpolli@babel.it>" ],
        url="http://cyberelk.net/tim/software/pysmbc/",
        download_url="http://cyberelk.net/tim/data/pysmbc/",
        classifiers=[
@@ -68,10 +81,12 @@ setup (name="pysmbc",
         "Programming Language :: C",
         ],
        license="GPLv2+",
-       ext_modules=[Extension("smbc",
-                              ["smbcmodule.c",
-                               "context.c",
-                               "dir.c",
-                               "file.c",
-                               "smbcdirent.c"],
-                              libraries=["smbclient"])])
+       packages=["smbc"],
+       ext_modules=[Extension("_smbc",
+                              ["smbc/smbcmodule.c",
+                               "smbc/context.c",
+                               "smbc/dir.c",
+                               "smbc/file.c",
+                               "smbc/smbcdirent.c"],
+                              libraries=["smbclient"],
+                              include_dirs=pkgconfig_I("smbclient"))])
