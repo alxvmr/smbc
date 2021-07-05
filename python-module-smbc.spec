@@ -1,8 +1,8 @@
 %define mname smbc
 
 Name: python-module-%mname
-Version: 1.0.15.3
-Release: alt1.1.1
+Version: 1.0.23
+Release: alt1
 
 Summary: Python interface for smbclient
 Group: Development/Python
@@ -44,13 +44,16 @@ popd
 
 %files
 %python_sitelibdir/*
-%doc README NEWS PKG-INFO
+%doc README.md NEWS PKG-INFO
 
 %files -n python3-module-%mname
 %python3_sitelibdir/*
-%doc README NEWS PKG-INFO
+%doc README.md NEWS PKG-INFO
 
 %changelog
+* Mon Jul 05 2021 Evgeny Sinelnikov <sin@altlinux.org> 1.0.23-alt1
+- updated to 1.0.23
+
 * Thu Mar 22 2018 Aleksei Nikiforov <darktemplar@altlinux.org> 1.0.15.3-alt1.1.1
 - (NMU) Rebuilt with python-3.6.4.
 
