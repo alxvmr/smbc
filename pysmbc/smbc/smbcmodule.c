@@ -26,7 +26,6 @@
  */
 
 #include <stdarg.h>
-#include <Python.h>
 #include "smbcmodule.h"
 #include "context.h"
 #include "dir.h"
@@ -115,6 +114,9 @@ PYSMBC_PROTOTYPE_HEADER
   INT_CONSTANT (SMBC_, PRINTER_SHARE);
   INT_CONSTANT (SMBC_, COMMS_SHARE);
   INT_CONSTANT (SMBC_, IPC_SHARE);
+  INT_CONSTANT (SMBC_, DIR);
+  INT_CONSTANT (SMBC_, FILE);
+  INT_CONSTANT (SMBC_, LINK);
   INT_CONSTANT (SMB_CTX_, FLAG_USE_KERBEROS);
   INT_CONSTANT (SMB_CTX_, FLAG_FALLBACK_AFTER_KERBEROS);
   INT_CONSTANT (SMBCCTX_, FLAG_NO_AUTO_ANONYMOUS_LOGON);
@@ -124,35 +126,39 @@ PYSMBC_PROTOTYPE_HEADER
   INT_CONSTANT (SMBC_, XATTR_FLAG_REPLACE);
 
   // define exception objects
-  NoEntryError = PyErr_NewException("smbc.NoEntryError", NULL, NULL);
+  PyObject *SmbError = PyErr_NewException("smbc.SmbError", PyExc_IOError, NULL);
+  Py_INCREF(SmbError);
+  PyModule_AddObject(m, "SmbError", SmbError);
+
+  NoEntryError = PyErr_NewException("smbc.NoEntryError", SmbError, NULL);
   Py_INCREF(NoEntryError);
   PyModule_AddObject(m, "NoEntryError", NoEntryError);
 
-  PermissionError = PyErr_NewException("smbc.PermissionError", NULL, NULL);
+  PermissionError = PyErr_NewException("smbc.PermissionError", SmbError, NULL);
   Py_INCREF(PermissionError);
   PyModule_AddObject(m, "PermissionError", PermissionError);
 
-  ExistsError = PyErr_NewException("smbc.ExistsError", NULL, NULL);
+  ExistsError = PyErr_NewException("smbc.ExistsError", SmbError, NULL);
   Py_INCREF(ExistsError);
   PyModule_AddObject(m, "ExistsError", ExistsError);
 
-  NotEmptyError = PyErr_NewException("smbc.NotEmptyError", NULL, NULL);
+  NotEmptyError = PyErr_NewException("smbc.NotEmptyError", SmbError, NULL);
   Py_INCREF(NotEmptyError);
   PyModule_AddObject(m, "NotEmptyError", NotEmptyError);
 
-  TimedOutError = PyErr_NewException("smbc.TimedOutError", NULL, NULL);
+  TimedOutError = PyErr_NewException("smbc.TimedOutError", SmbError, NULL);
   Py_INCREF(TimedOutError);
   PyModule_AddObject(m, "TimedOutError", TimedOutError);
 
-  NoSpaceError = PyErr_NewException("smbc.NoSpaceError", NULL, NULL);
+  NoSpaceError = PyErr_NewException("smbc.NoSpaceError", SmbError, NULL);
   Py_INCREF(NoSpaceError);
   PyModule_AddObject(m, "NoSpaceError", NoSpaceError);
 
-  NotDirectoryError = PyErr_NewException("smbc.NotDirectoryError", NULL, NULL);
+  NotDirectoryError = PyErr_NewException("smbc.NotDirectoryError", SmbError, NULL);
   Py_INCREF(NotDirectoryError);
   PyModule_AddObject(m, "NotDirectoryError", NotDirectoryError);
 
-  ConnectionRefusedError = PyErr_NewException("smbc.ConnectionRefusedError", NULL, NULL);
+  ConnectionRefusedError = PyErr_NewException("smbc.ConnectionRefusedError", SmbError, NULL);
   Py_INCREF(ConnectionRefusedError);
   PyModule_AddObject(m, "ConnectionRefusedError", ConnectionRefusedError);
 

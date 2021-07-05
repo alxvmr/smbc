@@ -23,7 +23,6 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include <Python.h>
 #include "smbcmodule.h"
 #include "context.h"
 #include "file.h"
@@ -142,6 +141,8 @@ File_read (File *self, PyObject *args)
   PyObject *ret;
   smbc_fstat_fn fn_fstat;
   struct stat st;
+  smbc_lseek_fn fn_lseek;
+  int current = 0;
 
   if (!PyArg_ParseTuple (args, "|k", &size))
 	return NULL;
@@ -152,7 +153,9 @@ File_read (File *self, PyObject *args)
     {
       fn_fstat = smbc_getFunctionFstat (ctx->context);
       (*fn_fstat) (ctx->context, self->file, &st);
-      size = st.st_size;
+      fn_lseek = smbc_getFunctionLseek (ctx->context);
+      current = (*fn_lseek) (ctx->context, self->file, 0, 1);
+      size = st.st_size-current;
     }
 
   buf = (char *)malloc (size);
@@ -173,19 +176,43 @@ File_read (File *self, PyObject *args)
 }
 
 static PyObject *
+File_readinto (File *self, PyObject *args)
+{
+  Context *ctx = self->context;
+  smbc_read_fn fn;
+  Py_buffer buf;
+  ssize_t len;
+
+  if (!PyArg_ParseTuple (args, "|s*", &buf))
+       return NULL;
+
+  fn = smbc_getFunctionRead (ctx->context);
+
+  len = (*fn) (ctx->context, self->file, buf.buf, buf.len);
+  PyBuffer_Release(&buf);
+  if (len < 0)
+    {
+      pysmbc_SetFromErrno ();
+      return NULL;
+    }
+
+  return PyLong_FromLong (len);
+}
+
+static PyObject *
 File_write (File *self, PyObject *args)
 {
   Context *ctx = self->context;
-  int size = 0;
   smbc_write_fn fn;
-  char *buf;
+  Py_buffer buf;
   ssize_t len;
 
-  if (!PyArg_ParseTuple (args, "s#", &buf, &size))
+  if (!PyArg_ParseTuple (args, "s*", &buf))
     return NULL;
 
   fn = smbc_getFunctionWrite (ctx->context);
-  len = (*fn) (ctx->context, self->file, buf, size);
+  len = (*fn) (ctx->context, self->file, buf.buf, buf.len);
+  PyBuffer_Release(&buf);
   if (len < 0)
     {
       pysmbc_SetFromErrno ();
@@ -299,6 +326,25 @@ File_lseek (File *self, PyObject *args)
   return Py_BuildValue (OFF_T_FORMAT, ret);
 }
 
+static PyObject *
+File_flush (PyObject *self)
+{
+  return NULL;
+}
+
+static PyObject *
+File_tell (File *self)
+{
+  PyObject *args = Py_BuildValue (OFF_T_FORMAT "i",  0, 1);
+  return File_lseek (self, args);
+}
+
+static PyObject *
+File_seekable (File *self)
+{
+  return Py_BuildValue("b", 1);
+}
+
 PyMethodDef File_methods[] =
   {
 	{"read", (PyCFunction)File_read, METH_VARARGS,
@@ -306,6 +352,12 @@ PyMethodDef File_methods[] =
 	 "@type size: int\n"
 	 "@param size: size of reading\n"
 	 "@return: read data"
+	},
+	{"readinto", (PyCFunction)File_readinto, METH_VARARGS,
+	 "readinto(b) -> int\n\n"
+	 "@type b: writable bytes-like object\n"
+	 "@param b: buffer to fill\n"
+	 "@return: number of bytes read"
 	},
 	{"write", (PyCFunction)File_write, METH_VARARGS,
 	 "write(buf) -> int\n\n"
@@ -328,6 +380,18 @@ PyMethodDef File_methods[] =
 	{"seek", (PyCFunction)File_lseek, METH_VARARGS,
 	 "seek(offset, whence=0)\n\n"
 	 "@return: on success, current offset location, othwerwise -1"
+	},
+	{"flush", (PyCFunction)File_flush, METH_NOARGS,
+	 "flush()\n\n"
+	 "@return: NOP function"
+	},
+	{"tell", (PyCFunction)File_tell, METH_NOARGS,
+	 "tell() -> int\n\n"
+	 "@return: on success, current location, othwerwise -1"
+	},
+	{"seekable", (PyCFunction)File_seekable, METH_NOARGS,
+	 "seekable() -> bool\n\n"
+	 "@return: determine if seekable"
 	},
     { NULL } /* Sentinel */
   };

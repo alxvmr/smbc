@@ -1,5 +1,32 @@
 NEWS
 ----
+New in 1.0.22:
+* Add File_seekable #52
+* Rework some routines to fix holes in error checking and potential mem… #50
+* Fix File_read when the current location is not zero #49
+* Add File_flush #48
+* Add File_tell #47
+
+New in 1.0.21:
+* Fix protocol support #45
+
+New in 1.0.19:
+* Added SAMBA protocol version optional variable #41
+
+New in 1.0.18:
+* Support Fix memleak for auth_fn #32
+* Support readinto #31
+
+New in 1.0.17:
+* Support buffer protocol #30
+* exceptions: use a shared superclass #28
+* setup: autodetect required library dirs #27
+
+New in 1.0.15.5:
+* fix NUL-termination bug
+
+New in 1.0.15.4:
+* added some constants
 
 New in 1.0.15.3:
 * added smbc.ConnectionRefusedError

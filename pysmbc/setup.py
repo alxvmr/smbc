@@ -5,6 +5,7 @@
 ## Authors:
 ##  Tim Waugh <twaugh@redhat.com>
 ##  Tsukasa Hamano <hamano@osstech.co.jp>
+##  Laurent Coustet <laurent.coustet@clarisys.fr>
 
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -50,43 +51,73 @@ hello
 
 """
 
-from distutils.core import setup, Extension
 import subprocess
+from setuptools import setup, Extension
 
-def pkgconfig_I (pkg):
+def pkgconfig_I(pkg):
     dirs = []
-    c = subprocess.Popen (["pkg-config", "--cflags", pkg],
-                          stdout=subprocess.PIPE)
+    c = subprocess.Popen(["pkg-config", "--cflags", pkg], stdout=subprocess.PIPE)
     (stdout, stderr) = c.communicate ()
-    for p in stdout.decode ('ascii').split ():
-        if p.startswith ("-I"):
-            dirs.append (p[2:])
+    for p in stdout.decode('ascii').split():
+        if p.startswith("-I"):
+            dirs.append(p[2:])
     return dirs
-    
-setup (name="pysmbc",
-       version="1.0.15.3",
-       description="Python bindings for libsmbclient",
-       long_description=__doc__,
-       author=["Tim Waugh <twaugh@redhat.com>",
-               "Tsukasa Hamano <hamano@osstech.co.jp>",
-               "Roberto Polli <rpolli@babel.it>" ],
-       url="http://cyberelk.net/tim/software/pysmbc/",
-       download_url="http://cyberelk.net/tim/data/pysmbc/",
-       classifiers=[
+
+def pkgconfig_L(pkg):
+    dirs = []
+    c = subprocess.Popen(["pkg-config", "--libs", pkg], stdout=subprocess.PIPE)
+    (stdout, stderr) = c.communicate ()
+    for p in stdout.decode('ascii').split():
+        if p.startswith("-L"):
+            dirs.append(p[2:])
+    return dirs
+
+def pkgconfig_Dversion(pkg, prefix=None):
+    if prefix is None:
+        prefix = pkg.upper() + '_'
+    c = subprocess.Popen(["pkg-config", "--modversion", pkg],
+                         stdout=subprocess.PIPE)
+    (stdout, stderr) = c.communicate()
+    vers = stdout.decode('ascii').rstrip().split('.')
+    if len(vers) == 3:
+        ver = str(int(vers[0]) * 10000 + int(vers[1]) * 100 + int(vers[2]))
+    else:
+        ver = str(int(vers[0]))
+    return [(prefix + 'VERSION', ver)]
+
+setup(
+    name="pysmbc",
+    version="1.0.23",
+    description="Python bindings for libsmbclient",
+    long_description=__doc__,
+    author=[
+        "Tim Waugh <twaugh@redhat.com>",
+        "Tsukasa Hamano <hamano@osstech.co.jp>",
+        "Roberto Polli <rpolli@babel.it>",
+    ],
+    url="https://github.com/hamano/pysmbc",
+    license="GPLv2+",
+    packages=["smbc"],
+    classifiers=[
         "Intended Audience :: Developers",
         "Topic :: Software Development :: Libraries :: Python Modules",
         "License :: OSI Approved :: GNU General Public License (GPL)",
         "Development Status :: 5 - Production/Stable",
         "Operating System :: Unix",
         "Programming Language :: C",
+    ],
+    ext_modules=[
+        Extension("_smbc", [
+            "smbc/smbcmodule.c",
+            "smbc/context.c",
+            "smbc/dir.c",
+            "smbc/file.c",
+            "smbc/smbcdirent.c"
         ],
-       license="GPLv2+",
-       packages=["smbc"],
-       ext_modules=[Extension("_smbc",
-                              ["smbc/smbcmodule.c",
-                               "smbc/context.c",
-                               "smbc/dir.c",
-                               "smbc/file.c",
-                               "smbc/smbcdirent.c"],
-                              libraries=["smbclient"],
-                              include_dirs=pkgconfig_I("smbclient"))])
+        libraries=["smbclient"],
+        library_dirs=pkgconfig_L("smbclient"),
+        include_dirs=pkgconfig_I("smbclient"),
+        define_macros=pkgconfig_Dversion("smbclient"),
+        )
+    ],
+)

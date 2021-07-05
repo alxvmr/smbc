@@ -1,72 +1,43 @@
-#!/usr/bin/env python
-
 import smbc
-import settings
-import sys
 
-def setUp():
-    pass
-
-def tearDown():
-    pass
-
-def test_AuthSuccess():
+def test_auth_succes(config):
     ctx = smbc.Context()
     ctx.optionNoAutoAnonymousLogin = True
-    cb = lambda se, sh, w, u, p: (w, settings.USERNAME, settings.PASSWORD)
+    cb = lambda se, sh, w, u, p: (w, config['username'], config['password'])
     ctx.functionAuthData = cb
-    uri = 'smb://' + settings.SERVER + '/' + settings.SHARE
-    try:
-        dir = ctx.opendir(uri)
-        print("ok: connection to ", uri)
-    except:
-        print("fail: connection to ", uri)
-        assert False
+    d = ctx.opendir(config['uri'])
+    assert d != None
 
-def test_AuthFailNoauth():
+def test_auth_failed_noauth(config):
     ctx = smbc.Context()
     ctx.optionNoAutoAnonymousLogin = True
-    uri = 'smb://' + settings.SERVER + '/' + settings.SHARE
     try:
-        dir = ctx.opendir(uri)
+        ctx.opendir(config['uri'])
     except smbc.PermissionError:
-        print("ok: permission error to ", uri)
-        pass
-    except:
-        print("fail: error connecting to", uri)
-        assert False
-    else:
-        print("fail: error connecting to", uri)
-        assert False
-
-def test_AuthFailNopass():
-    ctx = smbc.Context()
-    ctx.optionNoAutoAnonymousLogin = True
-    cb = lambda se, sh, w, u, p: (w, settings.USERNAME, "")
-    ctx.functionAuthData = cb
-    uri = 'smb://' + settings.SERVER + '/' + settings.SHARE
-    try:
-        dir = ctx.opendir(uri)
-    except smbc.PermissionError:
-        pass
-    except:
-        assert False
+        assert True
     else:
         assert False
 
-def test_AuthFailNoname():
+def test_auth_failed_nopass(config):
     ctx = smbc.Context()
     ctx.optionNoAutoAnonymousLogin = True
-    cb = lambda se, sh, w, u, p: (w, "", "")
+    cb = lambda se, sh, w, u, p: (w, config['username'], "")
     ctx.functionAuthData = cb
-    uri = 'smb://' + settings.SERVER + '/' + settings.SHARE
     try:
-        dir = ctx.opendir(uri)
+        ctx.opendir(config['uri'])
     except smbc.PermissionError:
-        pass
-    except:
-        assert False
+        assert True
     else:
         assert False
 
-
+def test_auth_failed_nouser(config):
+    ctx = smbc.Context()
+    ctx.optionNoAutoAnonymousLogin = True
+    cb = lambda se, sh, w, u, p: (w, "", config['password'])
+    ctx.functionAuthData = cb
+    try:
+        ctx.opendir(config['uri'])
+    except smbc.PermissionError:
+        assert True
+    else:
+        assert False

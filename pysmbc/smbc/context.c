@@ -25,8 +25,6 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include <Python.h>
-#include <string.h>
 #include "smbcmodule.h"
 #include "context.h"
 #include "dir.h"
@@ -85,9 +83,12 @@ auth_fn (SMBCCTX *ctx,
       return;
     }
 
-  strncpy (workgroup, use_workgroup, wgmaxlen);
-  strncpy (username, use_username, unmaxlen);
-  strncpy (password, use_password, pwmaxlen);
+  strncpy (workgroup, use_workgroup, wgmaxlen - 1);
+  workgroup[wgmaxlen - 1] = '\0';
+  strncpy (username, use_username, unmaxlen - 1);
+  username[unmaxlen - 1] = '\0';
+  strncpy (password, use_password, pwmaxlen - 1);
+  password[pwmaxlen - 1] = '\0';
   Py_DECREF (result);
   debugprintf ("<- auth_fn(), got callback result\n");
 }
@@ -113,15 +114,17 @@ Context_init (Context *self, PyObject *args, PyObject *kwds)
   PyObject *auth = NULL;
   int debug = 0;
   SMBCCTX *ctx;
+  char *proto = NULL;
   static char *kwlist[] =
     {
       "auth_fn",
       "debug",
+      "proto",
       NULL
     };
 
-  if (!PyArg_ParseTupleAndKeywords (args, kwds, "|Oi", kwlist,
-				    &auth, &debug))
+  if (!PyArg_ParseTupleAndKeywords (args, kwds, "|Ois", kwlist,
+				    &auth, &debug, &proto))
     {
       return -1;
     }
@@ -134,7 +137,7 @@ Context_init (Context *self, PyObject *args, PyObject *kwds)
 	  return -1;
 	}
 
-      Py_XINCREF (auth);
+      Py_INCREF (auth);
       self->auth_fn = auth;
     }
 
@@ -155,6 +158,17 @@ Context_init (Context *self, PyObject *args, PyObject *kwds)
   smbc_setOptionUserData (ctx, self);
   if (auth)
     smbc_setFunctionAuthDataWithContext (ctx, auth_fn);
+  if(proto)
+  {
+#if SMBCLIENT_VERSION >= 500 /* 0.5.0 or newer */
+    debugprintf("-> Setting client min/max protocol to %s by smbc_setOptionProtocols\n", proto);
+    smbc_setOptionProtocols(ctx, proto, proto);
+#else
+    debugprintf("-> Setting client min/max protocol to %s by smbc_option_set\n", proto);
+    smbc_option_set(ctx, "client max protocol", proto);
+    smbc_option_set(ctx, "client min protocol", proto);
+#endif
+  }
 
   if (smbc_init_context (ctx) == NULL)
     {
@@ -177,6 +191,7 @@ Context_dealloc (Context *self)
       smbc_free_context (self->context, 1);
     }
 
+  Py_XDECREF (self->auth_fn);
   Py_TYPE(self)->tp_free ((PyObject *) self);
 }
 
@@ -205,97 +220,123 @@ Context_set_credentials_with_fallback (Context *self, PyObject *args)
 
 static PyObject *
 Context_open (Context *self, PyObject *args)
-{
-  PyObject *largs, *lkwlist;
-  char *uri;
-  File *file;
-  int flags = 0;
-  int mode = 0;
-  smbc_open_fn fn;
+  {
+    PyObject *result = NULL;
+    PyObject *largs = NULL;
+    PyObject *lkwlist = NULL;
+    char *uri;
+    File *file = NULL;
+    int flags = 0;
+    int mode = 0;
+    smbc_open_fn fn_open;
 
-  debugprintf ("%p -> Context_open()\n", self->context);
-  if (!PyArg_ParseTuple (args, "s|ii", &uri, &flags, &mode))
-    {
-      debugprintf ("%p <- Context_open() EXCEPTION\n", self->context);
-      return NULL;
-    }
-
-  largs = Py_BuildValue ("()");
-  lkwlist = PyDict_New ();
-  PyDict_SetItemString (lkwlist, "context", (PyObject *) self);
-  file = (File *)smbc_FileType.tp_new (&smbc_FileType, largs, lkwlist);
-  if (!file)
-    {
-      return PyErr_NoMemory ();
-    }
-
-  if (smbc_FileType.tp_init ((PyObject *)file, largs, lkwlist) < 0)
-    {
-      smbc_FileType.tp_dealloc ((PyObject *)file);
-      debugprintf ("%p <- Context_open() EXCEPTION\n", self->context);
-      // already set error
-      return NULL;
-    }
-
-  fn = smbc_getFunctionOpen (self->context);
-  errno = 0;
-  file->file = (*fn) (self->context, uri, (int)flags, (mode_t)mode);
-  if (!file->file)
-    {
-      pysmbc_SetFromErrno ();
-      smbc_FileType.tp_dealloc ((PyObject *)file);
-      file = NULL;
-    }
-
-  Py_DECREF (largs);
-  Py_DECREF (lkwlist);
-  debugprintf ("%p <- Context_open() = File\n", self->context);
-  return (PyObject *)file;
-}
+    debugprintf ("%p -> Context_open()\n", self->context);
+    do /*once*/
+      {
+        if (!PyArg_ParseTuple (args, "s|ii", &uri, &flags, &mode))
+          {
+            debugprintf ("%p <- Context_open() EXCEPTION\n", self->context);
+            break;
+          } /*if*/
+        largs = Py_BuildValue("()");
+        if (PyErr_Occurred())
+            break;
+        lkwlist = PyDict_New();
+        if (PyErr_Occurred())
+            break;
+        PyDict_SetItemString(lkwlist, "context", (PyObject *)self);
+        if (PyErr_Occurred())
+            break;
+        file = (File *)smbc_FileType.tp_new(&smbc_FileType, largs, lkwlist);
+        if (file == NULL)
+          {
+            PyErr_NoMemory();
+            break;
+          } /*if*/
+        if (smbc_FileType.tp_init((PyObject *)file, largs, lkwlist) < 0)
+          {
+            debugprintf ("%p <- Context_open() EXCEPTION\n", self->context);
+            // already set error
+            break;
+          } /*if*/
+        fn_open = smbc_getFunctionOpen(self->context);
+        errno = 0;
+        file->file = fn_open(self->context, uri, (int)flags, (mode_t)mode);
+        if (file->file == NULL)
+          {
+            pysmbc_SetFromErrno();
+            break;
+          } /*if*/
+        debugprintf ("%p <- Context_open() = File\n", self->context);
+      /* all done */
+        result = (PyObject *)file;
+        file = NULL; /* so I don't dispose of it yet */
+      }
+    while (false);
+    if (file != NULL)
+      {
+        smbc_FileType.tp_dealloc((PyObject *)file);
+      } /*if*/
+    Py_XDECREF(largs);
+    Py_XDECREF(lkwlist);
+    return
+        result;
+  } /*Context_open*/
 
 static PyObject *
 Context_creat (Context *self, PyObject *args)
-{
-  PyObject *largs, *lkwlist;
-  char *uri;
-  int mode = 0;
-  File *file;
-  smbc_creat_fn fn;
+  {
+    PyObject *result = NULL;
+    PyObject *largs = NULL;
+    PyObject *lkwlist = NULL;
+    char *uri;
+    int mode = 0;
+    File *file = NULL;
+    smbc_creat_fn fn_creat;
 
-  if (!PyArg_ParseTuple (args, "s|i", &uri, &mode))
-    {
-      return NULL;
-    }
-
-  largs = Py_BuildValue ("()");
-  lkwlist = PyDict_New ();
-  PyDict_SetItemString (lkwlist, "context", (PyObject *) self);
-  file = (File *)smbc_FileType.tp_new (&smbc_FileType, largs, lkwlist);
-  if (!file)
-    {
-      return PyErr_NoMemory();
-    }
-
-  if (smbc_FileType.tp_init ((PyObject *)file, largs, lkwlist) < 0)
-    {
-      smbc_FileType.tp_dealloc ((PyObject *)file);
-      return NULL;
-    }
-
-  fn = smbc_getFunctionCreat (self->context);
-  errno = 0;
-  file->file = (*fn) (self->context, uri, mode);
-  if (!file->file)
-    {
-      pysmbc_SetFromErrno ();
-      smbc_FileType.tp_dealloc ((PyObject *)file);
-      file = NULL;
-    }
-
-  Py_DECREF (largs);
-  Py_DECREF (lkwlist);
-  return (PyObject *)file;
-}
+    do /*once*/
+      {
+        if (!PyArg_ParseTuple (args, "s|i", &uri, &mode))
+            break;
+        largs = Py_BuildValue("()");
+        if (PyErr_Occurred())
+            break;
+        lkwlist = PyDict_New();
+        if (PyErr_Occurred())
+            break;
+        PyDict_SetItemString(lkwlist, "context", (PyObject *)self);
+        if (PyErr_Occurred())
+            break;
+        file = (File *)smbc_FileType.tp_new(&smbc_FileType, largs, lkwlist);
+        if (file == NULL)
+          {
+            PyErr_NoMemory();
+            break;
+          } /*if*/
+        if (smbc_FileType.tp_init((PyObject *)file, largs, lkwlist) < 0)
+            break;
+        fn_creat = smbc_getFunctionCreat (self->context);
+        errno = 0;
+        file->file = fn_creat(self->context, uri, mode);
+        if (file->file == NULL)
+          {
+            pysmbc_SetFromErrno();
+            break;
+          } /*if*/
+      /* all done */
+        result = (PyObject *)file;
+        file = NULL; /* so I don't dispose of it yet */
+      }
+    while (false);
+    if (file != NULL)
+      {
+        smbc_FileType.tp_dealloc((PyObject *)file);
+      } /*if*/
+    Py_XDECREF(largs);
+    Py_XDECREF(lkwlist);
+    return
+        result;
+  } /*Context_creat*/
 
 static PyObject *
 Context_unlink (Context *self, PyObject *args)
@@ -357,35 +398,59 @@ Context_rename (Context *self, PyObject *args)
 
 static PyObject *
 Context_opendir (Context *self, PyObject *args)
-{
-  PyObject *largs, *lkwlist;
-  PyObject *uri;
-  PyObject *dir;
+  {
+    PyObject *result = NULL;
+    PyObject *largs = NULL;
+    PyObject *lkwlist = NULL;
+    PyObject *uri;
+    PyObject *dir = NULL;
 
-  debugprintf ("%p -> Context_opendir()\n", self->context);
-  if (!PyArg_ParseTuple (args, "O", &uri))
-    {
-      debugprintf ("%p <- Context_opendir() EXCEPTION\n", self->context);
-      return NULL;
-    }
-
-  largs = Py_BuildValue ("()");
-  lkwlist = PyDict_New ();
-  PyDict_SetItemString (lkwlist, "context", (PyObject *) self);
-  PyDict_SetItemString (lkwlist, "uri", uri);
-  dir = smbc_DirType.tp_new (&smbc_DirType, largs, lkwlist);
-  if (smbc_DirType.tp_init (dir, largs, lkwlist) < 0)
-    {
-      smbc_DirType.tp_dealloc (dir);
-      debugprintf ("%p <- Context_opendir() EXCEPTION\n", self->context);
-      return NULL;
-    }
-
-  Py_DECREF (largs);
-  Py_DECREF (lkwlist);
-  debugprintf ("%p <- Context_opendir() = Dir\n", self->context);
-  return dir;
-}
+    debugprintf ("%p -> Context_opendir()\n", self->context);
+    do /*once*/
+      {
+        if (!PyArg_ParseTuple(args, "O", &uri))
+          {
+            debugprintf ("%p <- Context_opendir() EXCEPTION\n", self->context);
+            break;
+          } /*if*/
+        largs = Py_BuildValue("()");
+        if (PyErr_Occurred())
+            break;
+        lkwlist = PyDict_New();
+        if (PyErr_Occurred())
+            break;
+        PyDict_SetItemString(lkwlist, "context", (PyObject *) self);
+        if (PyErr_Occurred())
+            break;
+        PyDict_SetItemString(lkwlist, "uri", uri);
+        if (PyErr_Occurred())
+            break;
+        dir = smbc_DirType.tp_new(&smbc_DirType, largs, lkwlist);
+        if (dir == NULL)
+          {
+            PyErr_NoMemory();
+            break;
+          } /*if*/
+        if (smbc_DirType.tp_init(dir, largs, lkwlist) < 0)
+          {
+            debugprintf ("%p <- Context_opendir() EXCEPTION\n", self->context);
+            break;
+          } /*if*/
+        debugprintf ("%p <- Context_opendir() = Dir\n", self->context);
+      /* all done */
+        result = (PyObject *)dir;
+        dir = NULL; /* so I don't dispose of it yet */
+      }
+    while (false);
+    if (dir != NULL)
+      {
+        smbc_DirType.tp_dealloc(dir);
+      } /*if*/
+    Py_XDECREF(largs);
+    Py_XDECREF(lkwlist);
+    return
+        result;
+  } /*Context_opendir*/
 
 static PyObject *
 Context_mkdir (Context *self, PyObject *args)
@@ -513,33 +578,43 @@ Context_chmod (Context *self, PyObject *args)
  */
 static PyObject *
 Context_getxattr (Context *self, PyObject *args)
-{
-  int ret;
-  char *uri = NULL;
-  char *name = NULL;
-  char value[1024];
-  static smbc_getxattr_fn fn;
-
-  bzero(value, sizeof (value));
-
-  // smbc_getxattr takes two string parameters
-  if (!PyArg_ParseTuple (args, "ss", &uri, &name))
-    {
-      return NULL;
-    }
-
-  errno = 0;
-  fn = smbc_getFunctionGetxattr(self->context);
-  ret = (*fn)(self->context, uri, name, value, sizeof (value));
-
-  if (ret < 0)
-    {
-      pysmbc_SetFromErrno ();
-      return NULL;
-  }
-
-  return PyUnicode_FromString (value);
-}
+  {
+    PyObject * result = NULL;
+    char *uri = NULL;
+    char *name = NULL;
+    char *buffer = NULL;
+    int ret;
+    do /*once*/
+      {
+        if (!PyArg_ParseTuple(args, "ss", &uri, &name))
+            break;
+        const smbc_getxattr_fn fn = smbc_getFunctionGetxattr(self->context);
+        errno = 0;
+        ret = fn(self->context, uri, name, NULL, 0);
+        if (ret < 0)
+          {
+            pysmbc_SetFromErrno();
+            break;
+          }
+	const int bufsize = ret + 1;
+        buffer = (char *)malloc(bufsize);
+        if (buffer == NULL)
+          {
+            PyErr_NoMemory();
+            break;
+          } /*if*/
+        ret = fn(self->context, uri, name, buffer, bufsize);
+        if (ret < 0)
+          {
+            pysmbc_SetFromErrno();
+            break;
+          } /*if*/
+        result = PyUnicode_FromString(buffer);
+      }
+    while (false);
+    free(buffer);
+    return result;
+  } /*Context_getxattr*/
 
 
 /**
@@ -701,7 +776,12 @@ Context_setNetbiosName (Context *self, PyObject *value, void *closure)
       return -1;
     }
 
-  chars = PyUnicode_GetSize (value); /* not including NUL */
+#if PY_MAJOR_VERSION > 3
+  chars = PyUnicode_GET_LENGTH(value);
+#else
+  chars = PyUnicode_GET_SIZE(value); /* not including NUL */
+#endif
+
   w_name = malloc ((chars + 1) * sizeof (wchar_t));
   if (!w_name)
     {
@@ -770,7 +850,12 @@ Context_setWorkgroup (Context *self, PyObject *value, void *closure)
       return -1;
     }
 
-  chars = PyUnicode_GetSize (value); /* not including NUL */
+#if PY_MAJOR_VERSION > 3
+  chars = PyUnicode_GET_LENGTH(value);
+#else
+  chars = PyUnicode_GET_SIZE(value); /* not including NUL */
+#endif
+
   w_workgroup = malloc ((chars + 1) * sizeof (wchar_t));
   if (!w_workgroup)
     {
@@ -841,6 +926,34 @@ Context_setTimeout (Context *self, PyObject *value, void *closure)
   return 0;
 }
 
+static PyObject *
+Context_getPort (Context *self, void *closure)
+{
+  int port = smbc_getPort (self->context);
+  return PyLong_FromLong (port);
+}
+
+static int
+Context_setPort (Context *self, PyObject *value, void *closure)
+{
+#if PY_MAJOR_VERSION < 3
+  if (!PyInt_Check (value))
+#else
+  if (!PyLong_Check (value))
+#endif
+    {
+      PyErr_SetString (PyExc_TypeError, "must be long");
+      return -1;
+    }
+
+#if PY_MAJOR_VERSION < 3
+  smbc_setPort (self->context, PyInt_AsLong (value));
+#else
+  smbc_setPort (self->context, PyLong_AsLong (value));
+#endif
+  return 0;
+}
+
 static int
 Context_setFunctionAuthData (Context *self, PyObject *value, void *closure)
 {
@@ -850,7 +963,8 @@ Context_setFunctionAuthData (Context *self, PyObject *value, void *closure)
       return -1;
     }
 
-  Py_XINCREF (value);
+  Py_XDECREF (self->auth_fn);
+  Py_INCREF (value);
   self->auth_fn = value;
   smbc_setFunctionAuthDataWithContext (self->context, auth_fn);
   return 0;
@@ -875,6 +989,28 @@ Context_setOptionDebugToStderr (Context *self, PyObject *value,
     }
 
   smbc_setOptionDebugToStderr (self->context, value == Py_True);
+  return 0;
+}
+
+static PyObject *
+Context_getOptionFullTimeNames (Context *self, void *closure)
+{
+  smbc_bool b;
+  b = smbc_getOptionFullTimeNames (self->context);
+  return PyBool_FromLong ((long) b);
+}
+
+static int
+Context_setOptionFullTimeNames (Context *self, PyObject *value,
+				void *closure)
+{
+  if (!PyBool_Check (value))
+    {
+      PyErr_SetString (PyExc_TypeError, "must be Boolean");
+      return -1;
+    }
+
+  smbc_setOptionFullTimeNames (self->context, value == Py_True);
   return 0;
 }
 
@@ -970,6 +1106,12 @@ PyGetSetDef Context_getseters[] =
       "Get the timeout used for waiting on connections and response data(in milliseconds)",
       NULL },
 
+		{ "port",
+      (getter) Context_getPort,
+      (setter) Context_setPort,
+      "Set the TCP port used to connect (0 means default).",
+      NULL },
+
     { "functionAuthData",
       (getter) NULL,
       (setter) Context_setFunctionAuthData,
@@ -980,6 +1122,12 @@ PyGetSetDef Context_getseters[] =
       (getter) Context_getOptionDebugToStderr,
       (setter) Context_setOptionDebugToStderr,
       "Whether to log to standard error instead of standard output.",
+      NULL },
+
+		{ "optionFullTimeNames",
+      (getter) Context_getOptionFullTimeNames,
+      (setter) Context_setOptionFullTimeNames,
+      "Use full time names (Create Time)",
       NULL },
 
     { "optionNoAutoAnonymousLogin",
@@ -1116,7 +1264,7 @@ PyMethodDef Context_methods[] =
 "                  to names.  Without the plus sign, SIDs are not mapped;\n"
 "                  rather they are simply converted to a string format.\n"
       "@return: a string representing the actual extended attributes of the uri" },
-      
+
        { "setxattr",
       (PyCFunction) Context_setxattr, METH_VARARGS,
       "setxattr(uri, the_acl) -> int\n\n"
