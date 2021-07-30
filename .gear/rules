@@ -1,1 +1,2 @@
+copy: use_kerberos.patch
 tar: pysmbc 
