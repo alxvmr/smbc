@@ -1,0 +1,39 @@
+diff --git a/pysmbc/smbc/context.c b/pysmbc/smbc/context.c
+index 5fc011b..6ae00e9 100644
+--- a/pysmbc/smbc/context.c
++++ b/pysmbc/smbc/context.c
+@@ -115,16 +115,18 @@ Context_init (Context *self, PyObject *args, PyObject *kwds)
+   int debug = 0;
+   SMBCCTX *ctx;
+   char *proto = NULL;
++  int use_kerberos = 0;
+   static char *kwlist[] =
+     {
+       "auth_fn",
+       "debug",
+       "proto",
++      "use_kerberos",
+       NULL
+     };
+ 
+-  if (!PyArg_ParseTupleAndKeywords (args, kwds, "|Ois", kwlist,
+-				    &auth, &debug, &proto))
++  if (!PyArg_ParseTupleAndKeywords (args, kwds, "|Oisi", kwlist,
++				    &auth, &debug, &proto, &use_kerberos))
+     {
+       return -1;
+     }
+@@ -152,6 +154,13 @@ Context_init (Context *self, PyObject *args, PyObject *kwds)
+       return -1;
+     }
+ 
++  /* Enable Kerberos authentication */
++  if (use_kerberos)
++    {
++      smbc_setOptionUseKerberos(ctx, 1);
++      smbc_setOptionFallbackAfterKerberos(ctx, 1);
++    }
++
+   smbc_setDebug (ctx, debug);
+ 
+   self->context = ctx;
