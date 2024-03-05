@@ -1,3 +1,5 @@
+.gitignore
+.travis.yml
 COPYING
 MANIFEST.in
 Makefile
@@ -5,6 +7,12 @@ NEWS
 README.md
 setup.py
 test.py
+nosetests_/settings.py
+nosetests_/test_acl.py
+nosetests_/test_auth.py
+nosetests_/test_context.py
+nosetests_/test_dir.py
+nosetests_/test_file.py
 pysmbc.egg-info/PKG-INFO
 pysmbc.egg-info/SOURCES.txt
 pysmbc.egg-info/dependency_links.txt
@@ -23,4 +31,6 @@ smbc/smbcmodule.h
 smbc/xattr.py
 tests/__init__.py
 tests/conftest.py
+tests/test_acl.py
 tests/test_auth.py
+tests/test_dir.py

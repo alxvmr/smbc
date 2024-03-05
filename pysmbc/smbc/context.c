@@ -3,6 +3,8 @@
  * Copyright (C) 2002, 2005, 2006, 2007, 2008, 2010, 2011, 2012, 2013  Red Hat, Inc
  * Copyright (C) 2010  Open Source Solution Technology Corporation
  * Copyright (C) 2010  Patrick Geltinger <patlkli@patlkli.org>
+ * Copyright (C) 2021  BaseALT, Ltd. <org@basealt.ru>
+ * Copyright (C) 2021  Igor Chudov <nir@nir.org.ru>
  * Authors:
  *  Tim Waugh <twaugh@redhat.com>
  *  Tsukasa Hamano <hamano@osstech.co.jp>
@@ -113,6 +115,7 @@ Context_init (Context *self, PyObject *args, PyObject *kwds)
 {
   PyObject *auth = NULL;
   int debug = 0;
+  int use_kerberos = 0;
   SMBCCTX *ctx;
   char *proto = NULL;
   static char *kwlist[] =
@@ -120,11 +123,12 @@ Context_init (Context *self, PyObject *args, PyObject *kwds)
       "auth_fn",
       "debug",
       "proto",
+      "use_kerberos",
       NULL
     };
 
-  if (!PyArg_ParseTupleAndKeywords (args, kwds, "|Ois", kwlist,
-				    &auth, &debug, &proto))
+  if (!PyArg_ParseTupleAndKeywords (args, kwds, "|Oisi", kwlist,
+				    &auth, &debug, &proto, &use_kerberos))
     {
       return -1;
     }
@@ -152,6 +156,13 @@ Context_init (Context *self, PyObject *args, PyObject *kwds)
       return -1;
     }
 
+  /* Enable Kerberos authentication */
+  if (use_kerberos)
+    {
+      smbc_setOptionUseKerberos(ctx, 1);
+      smbc_setOptionFallbackAfterKerberos(ctx, 1);
+    }
+
   smbc_setDebug (ctx, debug);
 
   self->context = ctx;
@@ -163,10 +174,6 @@ Context_init (Context *self, PyObject *args, PyObject *kwds)
 #if SMBCLIENT_VERSION >= 500 /* 0.5.0 or newer */
     debugprintf("-> Setting client min/max protocol to %s by smbc_setOptionProtocols\n", proto);
     smbc_setOptionProtocols(ctx, proto, proto);
-#else
-    debugprintf("-> Setting client min/max protocol to %s by smbc_option_set\n", proto);
-    smbc_option_set(ctx, "client max protocol", proto);
-    smbc_option_set(ctx, "client min protocol", proto);
 #endif
   }
 
@@ -776,7 +783,7 @@ Context_setNetbiosName (Context *self, PyObject *value, void *closure)
       return -1;
     }
 
-#if PY_MAJOR_VERSION > 3
+#if PY_MAJOR_VERSION >= 3
   chars = PyUnicode_GET_LENGTH(value);
 #else
   chars = PyUnicode_GET_SIZE(value); /* not including NUL */
@@ -850,7 +857,7 @@ Context_setWorkgroup (Context *self, PyObject *value, void *closure)
       return -1;
     }
 
-#if PY_MAJOR_VERSION > 3
+#if PY_MAJOR_VERSION >= 3
   chars = PyUnicode_GET_LENGTH(value);
 #else
   chars = PyUnicode_GET_SIZE(value); /* not including NUL */

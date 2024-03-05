@@ -1,6 +1,6 @@
 Metadata-Version: 1.1
 Name: pysmbc
-Version: 1.0.23
+Version: 1.0.25.1
 Summary: Python bindings for libsmbclient
 Home-page: https://github.com/hamano/pysmbc
 Author: ['Tim Waugh <twaugh@redhat.com>', 'Tsukasa Hamano <hamano@osstech.co.jp>', 'Roberto Polli <rpolli@babel.it>']
