@@ -1,8 +1,8 @@
 %define mname smbc
 
 Name: python3-module-%mname
-Version: 1.0.23
-Release: alt4
+Version: 1.0.25.1
+Release: alt1
 
 Summary: Python interface for smbclient
 Group: Development/Python3
@@ -10,7 +10,6 @@ License: GPLv2+
 URL: https://pypi.python.org/pypi/pysmbc/
 
 Source: https://pypi.python.org/packages/source/p/pysmbc//py%mname-%version.tar
-Patch0: use_kerberos.patch
 
 BuildRequires: libsmbclient-devel
 BuildRequires: rpm-build-python3
@@ -20,7 +19,6 @@ The smbc module provides an interface to the Samba client API.
 
 %prep
 %setup -n py%mname-%version -a0
-%patch0 -p2
 
 # hotfix for python3.12
 sed -i 's/PyUnicode_GET_SIZE/PyUnicode_GET_LENGTH/g' smbc/context.c
@@ -36,6 +34,9 @@ CFLAGS=-I/usr/include/samba-4.0/ %python3_build
 %doc README.md NEWS PKG-INFO
 
 %changelog
+* Tue Mar 05 2024 Maria Alexeeva <alxvmr@altlinux.org> 1.0.25.1-alt1
+- updated to 1.0.25.1
+
 * Tue Jan 09 2024 Grigory Ustinov <grenka@altlinux.org> 1.0.23-alt4
 - Fixed build with python3.12.
 
